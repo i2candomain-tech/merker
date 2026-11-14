@@ -108,6 +108,16 @@ chatEl.addEventListener('click',e=>{const b=e.target.closest('.undo');if(!b)retu
 
 async function llm(prompt){
   if(!cfg.key){openSettings();throw new Error('Bitte zuerst den KI-Schlüssel eintragen (⚙️)')}
+  if(cfg.key.startsWith('sk-ant-')){ // Claude Haiku (günstig, versteht deutlich besser)
+    const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'content-type':'application/json','x-api-key':cfg.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({model:(cfg.model||'').startsWith('claude')?cfg.model:'claude-haiku-5-5',max_tokens:4000,output_config:{effort:'low'},
+        messages:[{role:'user',content:prompt+'\n\nGib ausschließlich das JSON-Objekt aus, ohne Text davor oder danach.'}]})});
+    const j=await r.json();
+    if(!r.ok)throw new Error(j.error?.message||('Fehler '+r.status));
+    const txt=(j.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    const m=txt.match(/\{[\s\S]*\}/);if(!m)throw new Error('KI-Antwort unverständlich – bitte nochmal');
+    return JSON.parse(m[0]);
+  }
   if(cfg.key.startsWith('gsk_')){
     const H={'Content-Type':'application/json','Authorization':'Bearer '+cfg.key};
     const pick=async()=>{const m=await (await fetch('https://api.groq.com/openai/v1/models',{headers:H})).json();
@@ -133,6 +143,13 @@ async function llm(prompt){
   return JSON.parse((j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')||'{}').replace(/^```json|```$/g,''));
 }
 window.merkerLLM=llm;
+// Zusätzliches Feld in den Einstellungen: Groq-Schlüssel nur für Spracherkennung (wenn der Haupt-Schlüssel Claude ist)
+{const k=$('sKey');if(k){const l=document.createElement('label');l.textContent='Groq-Schlüssel für Spracherkennung (gsk_…, kostenlos)';
+  const i=document.createElement('input');i.type='password';i.autocomplete='off';i.placeholder='gsk_…';
+  try{i.value=localStorage.getItem('groqKey')||''}catch(e){}
+  i.addEventListener('input',()=>{try{localStorage.setItem('groqKey',i.value.trim())}catch(e){}});
+  k.after(i);k.after(l);
+  const lab=k.previousElementSibling;if(lab&&lab.tagName==='LABEL')lab.textContent='KI-Schlüssel – Claude (sk-ant-…) oder Groq (gsk_…)';k.placeholder='sk-ant-… oder gsk_…';}}
 
 const EXTRA=['sub','type','tags','repeat','until'];
 function extras(t,a){for(const k of EXTRA)if(a[k]!==undefined&&a[k]!=='')t[k]=a[k]}
@@ -155,25 +172,41 @@ function applyActions(acts){
 
 // Spracherkennung stoppen, sobald getippt/korrigiert oder gesendet wird – sonst überschreibt sie die Korrektur
 // Eigenes, iPhone-taugliches Mikrofon: pro Druck eine neue, kurze Aufnahme (kein Dauermodus)
-const SRx=window.SpeechRecognition||window.webkitSpeechRecognition;let mrec=null,mOn=false;
-const micBtn=$('mic');
-function micUI(on){mOn=on;micBtn.classList.toggle('rec',on);micBtn.textContent=on?'■':'🎤'}
-function stopRec(){if(mrec){const r=mrec;mrec=null;r.onresult=null;r.onerror=null;r.onend=null;try{r.abort()}catch(e){}}micUI(false)}
-// iPhone: eingebaute Web-Spracherkennung ist dort unzuverlässig -> Tastatur-Diktat nutzen
-const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
-micBtn.onclick=()=>{
-  if(!SRx||isIOS){$('input').focus();toast('Tippe unten rechts auf der Tastatur auf 🎤 und sprich – das ist am zuverlässigsten.',4500);return}
-  if(false){$('input').focus();toast('Tipp: Nutze das 🎤 auf der iPhone-Tastatur zum Diktieren',4000);return}
-  if(mOn){const r=mrec;if(r){try{r.stop()}catch(e){}}return}   // stop() liefert das letzte Ergebnis noch
-  const r=new SRx();mrec=r;r.lang='de-DE';r.continuous=false;r.interimResults=true;
-  const base=$('input').value?$('input').value.replace(/\s*$/,' '):'';
-  r.onresult=e=>{let s='';for(const x of e.results)s+=x[0].transcript;$('input').value=base+s;autoGrow()};
-  r.onerror=e=>{if(e.error!=='aborted'&&e.error!=='no-speech')toast('Mikrofon: '+e.error)};
-  r.onend=()=>{if(mrec===r)mrec=null;micUI(false)};
-  try{r.start();micUI(true)}catch(err){micUI(false);toast('Mikrofon konnte nicht starten – bitte nochmal tippen')}
+// Mikrofon: Audio aufnehmen (MediaRecorder) und von Groq Whisper in Text umwandeln.
+// Kein Browser-Spracherkenner mehr – der hängt sich auf dem iPhone auf und blockiert das Mikrofon.
+const micBtn=$('mic');let media=null,chunks=[],stream=null,mOn=false;
+function micUI(on,busy){mOn=on;micBtn.classList.toggle('rec',on);micBtn.textContent=busy?'…':on?'■':'🎤';micBtn.disabled=!!busy}
+function releaseMic(){try{stream&&stream.getTracks().forEach(t=>t.stop())}catch(e){}stream=null}
+function stopRec(){if(media&&media.state!=='inactive'){media.onstop=null;try{media.stop()}catch(e){}}media=null;releaseMic();micUI(false)}
+async function transcribe(blob){
+  const gk=(cfg.key||'').startsWith('gsk_')?cfg.key:(localStorage.getItem('groqKey')||'');
+  if(!gk)throw new Error('Für die Spracherkennung bitte unter ⚙️ den Groq-Schlüssel (gsk_…) eintragen');
+  const ext=(blob.type.includes('mp4')||blob.type.includes('m4a'))?'m4a':blob.type.includes('ogg')?'ogg':'webm';
+  const fd=new FormData();fd.append('file',blob,'sprache.'+ext);fd.append('model','whisper-large-v3-turbo');fd.append('language','de');fd.append('response_format','json');
+  const names=((store.get('profileData',{})||{}).people||[]).map(p=>p.name).filter(Boolean).slice(0,40).join(', ');
+  if(names)fd.append('prompt','Namen: '+names);
+  let r=await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{method:'POST',headers:{Authorization:'Bearer '+gk},body:fd});
+  if(!r.ok&&r.status!==429){fd.set('model','whisper-large-v3');r=await fetch('https://api.groq.com/openai/v1/audio/transcriptions',{method:'POST',headers:{Authorization:'Bearer '+gk},body:fd})}
+  const j=await r.json();if(!r.ok)throw new Error(j.error?.message||('Fehler '+r.status));
+  return (j.text||'').trim();
+}
+micBtn.onclick=async()=>{
+  if(mOn){if(media&&media.state!=='inactive')media.stop();return}
+  if(!navigator.mediaDevices||!window.MediaRecorder){toast('Aufnahme wird hier nicht unterstützt – nutze das 🎤 der Tastatur',4500);return}
+  try{stream=await navigator.mediaDevices.getUserMedia({audio:true})}catch(e){toast('Kein Zugriff aufs Mikrofon – in den iPhone-Einstellungen erlauben',5000);return}
+  chunks=[];
+  try{media=new MediaRecorder(stream)}catch(e){releaseMic();toast('Aufnahme konnte nicht starten');return}
+  media.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data)};
+  media.onstop=async()=>{
+    const type=media&&media.mimeType||'audio/mp4';releaseMic();media=null;micUI(false,true);
+    try{const blob=new Blob(chunks,{type});if(blob.size<1500){toast('Nichts aufgenommen');return}
+      const t=await transcribe(blob);
+      if(t){const v=$('input').value.trim();$('input').value=(v?v+' ':'')+t;autoGrow();$('input').focus()}else toast('Nichts verstanden – bitte nochmal')}
+    catch(err){toast('Spracherkennung: '+err.message,5000)}
+    finally{micUI(false)}};
+  media.start();micUI(true);
+  setTimeout(()=>{if(media&&media.state==='recording')media.stop()},120000); // max. 2 Minuten
 };
-// Tippt man selbst ins Feld (Korrektur), Aufnahme beenden, damit sie nichts überschreibt
-$('input').addEventListener('input',e=>{if(e.isTrusted&&mOn)stopRec()});
 async function chatSend(){
   stopRec();
   const text=$('input').value.trim();if(!text)return;
