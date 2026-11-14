@@ -75,7 +75,8 @@ window.render=function(){
     const a=tn&&AREAS[tn.textContent.trim()];if(a)tn.textContent=a.icon+' '+a.label});
   L.querySelectorAll('.task[data-id]').forEach(el=>{const t=tasks.find(x=>x.id===el.dataset.id);const meta=el.querySelector('.t-meta');
     if(t&&meta&&(t.sub||t.type&&t.type!=='Aufgabe')){const s=document.createElement('span');s.className='sub';
-      s.textContent=[t.type&&t.type!=='Aufgabe'?t.type:'',t.sub].filter(Boolean).join(' · ');meta.querySelector('.badge')?.after(s)}});
+      s.textContent=[t.type&&t.type!=='Aufgabe'?t.type:'',t.sub].filter(Boolean).join(' · ');meta.querySelector('.badge')?.after(s)}
+    if(t&&meta&&t.until){const u=document.createElement('span');u.textContent='→ bis '+new Date(t.until+'T00:00').toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'});meta.appendChild(u)}});
   if(filter!=='Alle')return;
   const soon=new Date(Date.now()+2*864e5).toISOString().slice(0,10);
   const imp=tasks.filter(t=>!t.done&&!t.suggested&&(t.priority==='hoch'||(t.due&&t.due<=soon)))
@@ -130,7 +131,7 @@ async function llm(prompt){
 }
 window.merkerLLM=llm;
 
-const EXTRA=['sub','type','tags','repeat'];
+const EXTRA=['sub','type','tags','repeat','until'];
 function extras(t,a){for(const k of EXTRA)if(a[k]!==undefined&&a[k]!=='')t[k]=a[k]}
 function applyActions(acts){
   const done=[];
@@ -144,7 +145,7 @@ function applyActions(acts){
     else if(a.op==='delete'&&t){tasks=tasks.filter(x=>x!==t);done.push('🗑 '+t.title)}
     else if(a.op==='done'&&t){t.done=true;t.doneAt=Date.now();done.push('✅ '+t.title)}
     else if(a.op==='add'||!a.op){const n=normalize(a,'');extras(n,a);tasks.push(n);
-      done.push('➕ '+n.title+' · '+n.category+(n.sub?' › '+n.sub:'')+(n.due?' · '+new Date(n.due+'T00:00').toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'})+(n.time?' '+n.time:''):'')+(n.repeat?' · 🔁 '+n.repeat:'')+(n.priority==='hoch'?' ❗':''))}
+      done.push('➕ '+n.title+' · '+n.category+(n.sub?' › '+n.sub:'')+(n.due?' · '+new Date(n.due+'T00:00').toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'})+(n.time?' '+n.time:''):'')+(n.until?' bis '+new Date(n.until+'T00:00').toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'}):'')+(n.repeat?' · 🔁 '+n.repeat:'')+(n.priority==='hoch'?' ❗':''))}
   }
   return done;
 }
@@ -190,6 +191,7 @@ SO ARBEITEST DU:
 - Sagt der Nutzer "egal", "kein Datum", "weiß nicht" -> ohne diese Angabe anlegen.
 - Korrekturen ("nein", "nicht X sondern Y", "ich meinte") -> bestehenden Eintrag per "update" (mit id) ändern, falsche per "delete". NIE Duplikate.
 - "erledigt" -> "done"; "streich/lösch" -> "delete". Fragen zur Liste ("was steht morgen an?") aus den Einträgen beantworten, ohne Aktionen.
+- ZEITRÄUME ("ganze nächste Woche", "Montag bis Freitag", "vom 3. bis 7.") sind IMMER GENAU EIN Eintrag: due = erster Tag, until = letzter Tag (YYYY-MM-DD). NIEMALS pro Tag einen eigenen Eintrag anlegen. "Ganze Woche" bei Arbeit = Montag bis Freitag.
 - Wiederkehrendes ("jeden Sonntag") -> repeat z. B. "wöchentlich So", due = nächstes Vorkommen.
 - Einsatzorte mit "nächstem Einsatz" im Profil: Aufgaben für diesen Ort sind erst dann fällig (due = dieser Tag), Priorität normal.
 - priority "hoch", wenn andere auf den Nutzer angewiesen sind oder ein Versäumnis Folgen hat (Fristen, Zahlungen, Absagen, andere informieren, Vorträge/Leitungsaufgaben vorbereiten, Externe, "dringend/wichtig"). Routine = "normal".
@@ -199,7 +201,7 @@ SO ARBEITEST DU:
 - Ton: so wie im Profil gewünscht (du, direkt, präzise, ohne Floskeln). Antworte in 1–3 Sätzen. KEINE Begrüßung, keine Anrede mit Namen am Anfang – komm direkt zur Sache.
 
 Antworte NUR mit JSON:
-{"reply":"…","actions":[{"op":"add|update|delete|done","id":"nur bei update/delete/done","title":"","category":"${Object.keys(AREAS).join('|')}","sub":"","type":"Termin|Aufgabe|Erinnerung|Notiz|Idee|Ziel","tags":[],"due":"YYYY-MM-DD oder leer","time":"HH:MM oder leer","repeat":"","person":"","notes":"","priority":"normal|hoch"}],"profile_updates":[{"area":"general|routines|goals|${Object.keys(AREAS).join('|')}","text":"kurzer Satz"}],"people":[{"name":"","role":"","area":"","note":""}]}`;
+{"reply":"…","actions":[{"op":"add|update|delete|done","id":"nur bei update/delete/done","title":"","category":"${Object.keys(AREAS).join('|')}","sub":"","type":"Termin|Aufgabe|Erinnerung|Notiz|Idee|Ziel","tags":[],"due":"YYYY-MM-DD oder leer","until":"YYYY-MM-DD nur bei Zeitraum, sonst leer","time":"HH:MM oder leer","repeat":"","person":"","notes":"","priority":"normal|hoch"}],"profile_updates":[{"area":"general|routines|goals|${Object.keys(AREAS).join('|')}","text":"kurzer Satz"}],"people":[{"name":"","role":"","area":"","note":""}]}`;
     const out=await llm(prompt);
     const backup=JSON.stringify({tasks,profile:store.get('profileData',null)});
     const done=applyActions(out.actions);

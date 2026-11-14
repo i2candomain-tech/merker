@@ -85,12 +85,12 @@ const ics1=t=>{const d=t.due.replace(/-/g,'');const lines=['BEGIN:VEVENT','UID:'
   if(t.time){const [h,m]=t.time.split(':').map(Number);const e=new Date(2000,0,1,h+1,m);
     lines.push('DTSTART;TZID=Europe/Berlin:'+d+'T'+t.time.replace(':','')+'00','DTEND;TZID=Europe/Berlin:'+d+'T'+String(e.getHours()).padStart(2,'0')+String(e.getMinutes()).padStart(2,'0')+'00',
       'BEGIN:VALARM','TRIGGER:-PT30M','ACTION:DISPLAY','DESCRIPTION:Erinnerung','END:VALARM')}
-  else{const n=new Date(t.due+'T12:00');n.setDate(n.getDate()+1);lines.push('DTSTART;VALUE=DATE:'+d,'DTEND;VALUE=DATE:'+n.toISOString().slice(0,10).replace(/-/g,''),
+  else{const n=new Date((t.until&&t.until>t.due?t.until:t.due)+'T12:00');n.setDate(n.getDate()+1);lines.push('DTSTART;VALUE=DATE:'+d,'DTEND;VALUE=DATE:'+n.toISOString().slice(0,10).replace(/-/g,''),
       'BEGIN:VALARM','TRIGGER:PT8H','ACTION:DISPLAY','DESCRIPTION:Erinnerung','END:VALARM')}
   lines.push('BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY','DESCRIPTION:Erinnerung','END:VALARM',
     'SUMMARY:'+(t.priority==='hoch'?'❗ ':'')+t.title.replace(/[,;\n]/g,' '),'DESCRIPTION:'+[(AR[t.category]?AR[t.category].label:t.category),t.sub,t.person,t.notes].filter(Boolean).join(' - ').replace(/[,;\n]/g,' '),'END:VEVENT');
   return lines.join('\r\n')};
-const sig=t=>[t.title,t.due,t.time].join('|');
+const sig=t=>[t.title,t.due,t.time,t.until||''].join('|');
 function pendingCal(){const sent=store.get('calSent',{});return tasks.filter(t=>!t.done&&!t.suggested&&t.due&&t.due>=todayISO()&&t.type!=='Notiz'&&t.type!=='Idee'&&sent[t.id]!==sig(t))}
 window.exportCalendar=function(list){
   list=list||pendingCal();if(!list.length){toast('Keine neuen Termine für den Kalender');return}
