@@ -112,14 +112,17 @@ async function llm(prompt){
     const H={'Content-Type':'application/json','Authorization':'Bearer '+cfg.key};
     const pick=async()=>{const m=await (await fetch('https://api.groq.com/openai/v1/models',{headers:H})).json();
       const ids=(m.data||[]).filter(x=>x.active!==false).map(x=>x.id).filter(id=>!/whisper|tts|guard|vision|embed|orpheus|compound/i.test(id));
-      for(const p of [/gpt-oss-120b/,/llama-4-maverick/,/llama.*70b/,/qwen/,/gpt-oss/,/llama-4/,/llama/]){const f=ids.find(id=>p.test(id));if(f)return f}return ids[0]};
-    let model=(cfg.model||'').trim();if(!model||model.startsWith('gemini'))model=localStorage.getItem('groqModel')||await pick();
+      // Chat bevorzugt Modelle mit höherem Gratis-Limit; Gmail-Skript nutzt ein anderes Modell -> getrennte Limits
+      for(const p of [/llama-4-scout/,/llama-4-maverick/,/llama-3\.3-70b/,/qwen/,/gpt-oss-120b/,/gpt-oss/,/llama/]){const f=ids.find(id=>p.test(id));if(f)return f}return ids[0]};
+    let model=(cfg.model||'').trim();if(!model||model.startsWith('gemini'))model=localStorage.getItem('groqModel2')||await pick();
     const call=md=>fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:H,
       body:JSON.stringify({model:md,messages:[{role:'user',content:prompt}],response_format:{type:'json_object'},temperature:0.2})});
     let r=await call(model),j=await r.json();
+    if(r.status===429){const s=parseFloat((j.error?.message||'').match(/try again in ([\d.]+)s/)?.[1]||'0');
+      if(s>0&&s<=40){toast('Kurz warten (Gratis-Limit) … '+Math.ceil(s)+' Sek.',Math.ceil(s)*1000);await new Promise(x=>setTimeout(x,s*1000+500));r=await call(model);j=await r.json()}}
     if(!r.ok&&/model/i.test(j.error?.message||'')){model=await pick();r=await call(model);j=await r.json()}
     if(!r.ok)throw new Error(j.error?.message||('Fehler '+r.status));
-    try{localStorage.setItem('groqModel',model)}catch(e){}
+    try{localStorage.setItem('groqModel2',model)}catch(e){}
     return JSON.parse(j.choices?.[0]?.message?.content||'{}');
   }
   const model=(cfg.model||'gemini-2.5-flash').trim();
@@ -164,8 +167,9 @@ async function chatSend(){
   $('send').disabled=true;
   try{
     const now=new Date();
-    const open=tasks.filter(t=>!t.done&&!t.suggested).slice(-50).map(t=>({id:t.id,title:t.title,category:t.category,sub:t.sub,type:t.type,due:t.due,time:t.time,repeat:t.repeat,person:t.person,notes:t.notes,priority:t.priority}));
-    const hist=msgs.slice(-12).map(m=>(m.role==='me'?'Nutzer: ':'Merker: ')+m.text+(m.acts&&m.acts.length?' ['+m.acts.join('; ')+']':'')).join('\n');
+    // nur das Nötigste mitschicken (spart Tokens): max. 30 offene Einträge, kurze Felder
+    const open=tasks.filter(t=>!t.done&&!t.suggested).slice(-30).map(t=>{const o={id:t.id,title:t.title,c:t.category};if(t.due)o.due=t.due;if(t.until)o.until=t.until;if(t.time)o.time=t.time;if(t.person)o.person=t.person;return o});
+    const hist=msgs.slice(-6).map(m=>(m.role==='me'?'Nutzer: ':'Merker: ')+m.text+(m.acts&&m.acts.length?' ['+m.acts.join('; ')+']':'')).join('\n');
     const areas=Object.entries(AREAS).map(([k,v])=>`- "${k}" = ${v.label}; Unterkategorien: ${v.subs.join(', ')}`).join('\n');
     const prompt=`Du bist "Merker", der persönliche Organisations- und Erinnerungsassistent des Nutzers in seiner Aufgaben-App.
 Heute ist ${now.toLocaleDateString('de-DE',{weekday:'long',year:'numeric',month:'2-digit',day:'2-digit'})} (ISO ${todayISO()}), ${now.toTimeString().slice(0,5)} Uhr, Europe/Berlin.
