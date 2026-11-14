@@ -73,6 +73,10 @@ window.addProfileNote=function(area,text){
   else if(AR[area]){P.a[area]=((P.a[area]||'').trim()?P.a[area].trim()+'\n':'')+'• '+text}
   else{const k=['general','routines','goals','style'].includes(area)?area:'general';P[k]=((P[k]||'').trim()?P[k].trim()+'\n':'')+'• '+text}
   saveP();renderMe()};
+window.addPerson=function(p){const n=String(p.name).trim();const ex=P.people.find(x=>x.name.toLowerCase()===n.toLowerCase());
+  if(ex){if(p.role)ex.role=p.role;if(p.area)ex.area=p.area;if(p.note)ex.note=p.note}
+  else P.people.push({name:n,role:p.role||'',area:p.area||'',note:p.note||''});
+  saveP();renderMe()};
 window.setProfileData=function(p){if(p){P=Object.assign({},P0,p);P.a=P.a||{};saveP();renderMe()}};
 saveP();
 
@@ -136,7 +140,7 @@ function renderMe(){
   const hr=new Date().getHours();
   const ta=(k,val,rows,ph,attr='data-k')=>`<textarea ${attr}="${k}" rows="${rows}" placeholder="${ph}">${esc(val||'')}</textarea>`;
   me.innerHTML=`
-  <div class="hello">${esc(P.greeting||(hr<11?'Guten Morgen':hr<18?'Hallo':'Guten Abend'))}${P.name?', '+esc(P.name.split(' ')[0]):''} 👋</div>
+  <div class="hello">${hr<11?'Guten Morgen':hr<18?'Hallo':'Guten Abend'}${P.name?', '+esc(P.name.split(' ')[0]):''} 👋</div>
   <div class="hint">${today.length?today.length+' Eintrag/Einträge heute':'Heute nichts Festes'}${over.length?' · <span style="color:var(--danger)">'+over.length+' überfällig</span>':''}</div>
 
   <h2>📅 Heute & demnächst</h2>
@@ -159,8 +163,7 @@ function renderMe(){
     <button class="primary" id="impBtn">Übernehmen</button>
     <div class="hint">Profil-Datei (JSON) wird direkt übernommen – nichts verlässt das Gerät. Freier Text wird einmal von der KI (Groq) in die Bereiche verteilt.</div>
   </div></details>
-  <div class="card"><div class="row2"><div><label>Name</label><input data-k="name" value="${esc(P.name)}" placeholder="Vorname Nachname"></div>
-    <div><label>Begrüßung</label><input data-k="greeting" value="${esc(P.greeting)}" placeholder="z. B. Hallo"></div></div></div>
+  <div class="card"><label>Name</label><input data-k="name" value="${esc(P.name)}" placeholder="Vorname Nachname"></div>
   ${BASE.map(([k,ic,label,ph])=>`<details data-k="${k}"><summary>${ic} ${label}<span class="st">${filled(P[k])}</span></summary><div class="in">${ta(k,P[k],6,ph)}</div></details>`).join('')}
   ${Object.entries(AR).map(([k,v])=>`<details data-k="a-${k}"><summary>${v.icon} ${esc(v.label)}<span class="st">${filled(P.a[k])}</span></summary><div class="in">
     ${ta(k,P.a[k],7,'Rollen, Aufgaben, Zuständigkeiten, wichtige Infos …','data-a')}

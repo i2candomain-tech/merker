@@ -96,7 +96,7 @@ const saveChat=()=>store.set('chat',msgs.slice(-40));
 const prof=()=>store.get('profileData',{})||{};
 const myName=()=>(prof().name||'').split(' ')[0];
 function renderChat(){
-  if(!msgs.length)msgs=[{role:'ai',text:(prof().greeting||'Hallo')+(myName()?', '+myName():'')+'! Was steht an? Termine, Fristen, Besorgungen – schreib oder sprich einfach. Wenn etwas unklar ist, frage ich nach.'}];
+  if(!msgs.length)msgs=[{role:'ai',text:'Was steht an? Termine, Fristen, Besorgungen – schreib oder sprich einfach. Wenn etwas unklar ist, frage ich nach.'}];
   chatEl.innerHTML=msgs.map((m,i)=>`<div class="msg ${m.role==='me'?'me':'ai'}">${esc(m.text)}${m.acts&&m.acts.length?`<div class="acts">${m.acts.map(a=>`<div class="act">${esc(a)}</div>`).join('')}</div>`:''}${m.undo?`<button class="undo" data-i="${i}">↩︎ Rückgängig</button>`:''}</div>`).join('')
     +(msgs.length>1?'<button class="chat-clear" id="chatClear">Chat leeren</button>':'');
   const c=$('chatClear');if(c)c.onclick=()=>{msgs=[];saveChat();renderChat()};
@@ -149,7 +149,12 @@ function applyActions(acts){
   return done;
 }
 
+// Spracherkennung stoppen, sobald getippt/korrigiert oder gesendet wird – sonst überschreibt sie die Korrektur
+const stopRec=()=>{try{if(recOn&&rec){rec.onresult=null;rec.abort()}}catch(e){}};
+$('input').addEventListener('input',e=>{if(e.isTrusted)stopRec()});
+$('input').addEventListener('focus',stopRec);
 async function chatSend(){
+  stopRec();
   const text=$('input').value.trim();if(!text)return;
   if(mode!=='chat')setMode('chat');
   msgs.push({role:'me',text});$('input').value='';autoGrow();saveChat();renderChat();
@@ -189,16 +194,17 @@ SO ARBEITEST DU:
 - Einsatzorte mit "nächstem Einsatz" im Profil: Aufgaben für diesen Ort sind erst dann fällig (due = dieser Tag), Priorität normal.
 - priority "hoch", wenn andere auf den Nutzer angewiesen sind oder ein Versäumnis Folgen hat (Fristen, Zahlungen, Absagen, andere informieren, Vorträge/Leitungsaufgaben vorbereiten, Externe, "dringend/wichtig"). Routine = "normal".
 - Plane mit Rücksicht auf feste Termine und Verpflichtungen aus dem Profil. Weise kurz auf Überschneidungen hin.
-- Neue langfristige Infos über den Nutzer (nicht einmalige Aufgaben!), z. B. neue Person, neue Rolle, geänderte Gewohnheit -> in "profile_updates" eintragen. Widerspricht etwas dem Profil, frage nach statt zu überschreiben.
+- Neue langfristige Infos über den Nutzer (nicht einmalige Aufgaben!), z. B. neue Rolle oder geänderte Gewohnheit -> in "profile_updates" eintragen. PERSONEN kommen NIE in profile_updates, sondern einzeln in "people": für JEDE genannte Person ein eigener Eintrag mit name (nur der Name), role (kurz, z. B. "Teamleitung", "Kollegin", "Klient") und area; Zusatzinfos kurz in note. Bei 5 Personen also 5 Einträge. Widerspricht etwas dem Profil, frage nach statt zu überschreiben.
 - Klientendaten sparsam: nur Vorname/Kürzel in Titeln, keine Diagnosen oder Fallinfos.
-- Ton: so wie im Profil gewünscht (du, direkt, präzise, ohne Floskeln). Antworte in 1–3 Sätzen. Wenn du grüßt, dann mit "${prof().greeting||'Hallo'}".
+- Ton: so wie im Profil gewünscht (du, direkt, präzise, ohne Floskeln). Antworte in 1–3 Sätzen. KEINE Begrüßung, keine Anrede mit Namen am Anfang – komm direkt zur Sache.
 
 Antworte NUR mit JSON:
-{"reply":"…","actions":[{"op":"add|update|delete|done","id":"nur bei update/delete/done","title":"","category":"${Object.keys(AREAS).join('|')}","sub":"","type":"Termin|Aufgabe|Erinnerung|Notiz|Idee|Ziel","tags":[],"due":"YYYY-MM-DD oder leer","time":"HH:MM oder leer","repeat":"","person":"","notes":"","priority":"normal|hoch"}],"profile_updates":[{"area":"general|routines|goals|people|${Object.keys(AREAS).join('|')}","text":"kurzer Satz"}]}`;
+{"reply":"…","actions":[{"op":"add|update|delete|done","id":"nur bei update/delete/done","title":"","category":"${Object.keys(AREAS).join('|')}","sub":"","type":"Termin|Aufgabe|Erinnerung|Notiz|Idee|Ziel","tags":[],"due":"YYYY-MM-DD oder leer","time":"HH:MM oder leer","repeat":"","person":"","notes":"","priority":"normal|hoch"}],"profile_updates":[{"area":"general|routines|goals|${Object.keys(AREAS).join('|')}","text":"kurzer Satz"}],"people":[{"name":"","role":"","area":"","note":""}]}`;
     const out=await llm(prompt);
     const backup=JSON.stringify({tasks,profile:store.get('profileData',null)});
     const done=applyActions(out.actions);
-    for(const u of out.profile_updates||[]){if(u&&u.text&&window.addProfileNote){window.addProfileNote(u.area,u.text);done.push('🧠 Gemerkt: '+u.text)}}
+    for(const u of out.profile_updates||[]){if(u&&u.text&&u.area!=='people'&&window.addProfileNote){window.addProfileNote(u.area,u.text);done.push('🧠 Gemerkt: '+u.text)}}
+    for(const p of out.people||[]){if(p&&p.name&&p.name.length<60&&window.addPerson){window.addPerson(p);done.push('👤 '+p.name+(p.role?' – '+p.role:''))}}
     save();
     msgs.push({role:'ai',text:out.reply||(done.length?'Erledigt.':'Okay.'),acts:done,undo:done.length?backup:null});
   }catch(e){msgs.push({role:'ai',text:'⚠️ '+e.message})}
