@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Merker">
+<meta name="theme-color" content="#0b0f14">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>Merker</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0f14;--card:#151b23;--text:#e5e7eb;--muted:#8b95a5;--line:#252f3d;--accent:#14b8a6;--danger:#f87171}
+.cat-head{display:flex;align-items:center;gap:8px;margin:22px 0 8px;font-size:17px;font-weight:700}
+.cat-head .dot{width:10px;height:10px;border-radius:50%}
+.cat-head .cnt{margin-left:auto;font-size:13px;color:var(--muted);font-weight:500}
+.task{border-left:4px solid var(--c,var(--line))}
+.mic{width:56px!important;height:56px!important;font-size:24px!important}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding:env(safe-area-inset-top) 16px calc(120px + env(safe-area-inset-bottom))}
+header{display:flex;align-items:center;justify-content:space-between;padding:14px 0 8px}
+h1{font-size:26px;margin:0}
+button{font:inherit;cursor:pointer;border:0;border-radius:12px}
+.icon-btn{background:none;color:var(--accent);font-size:15px;padding:8px}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding:6px 0 10px}
+.tab{background:var(--card);color:var(--text);border:1px solid var(--line);padding:6px 12px;border-radius:999px;white-space:nowrap;font-size:14px}
+.tab.on{background:var(--accent);color:#fff;border-color:var(--accent)}
+.section-title{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);margin:18px 0 6px}
+.task{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start}
+.check{width:24px;height:24px;border-radius:50%;border:2px solid var(--muted);background:none;flex:none;margin-top:2px}
+.task.done .check{background:var(--accent);border-color:var(--accent)}
+.task.done .t-title{text-decoration:line-through;color:var(--muted)}
+.t-body{flex:1;min-width:0}
+.t-title{font-weight:600;word-wrap:break-word}
+.t-meta{font-size:13px;color:var(--muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.badge{font-size:11px;font-weight:600;color:#fff;padding:2px 8px;border-radius:999px}
+.overdue{color:var(--danger);font-weight:600}
+.t-actions{display:flex;gap:4px;margin-top:8px}
+.t-actions button{background:var(--bg);color:var(--text);font-size:13px;padding:5px 10px;border-radius:8px}
+.empty{color:var(--muted);text-align:center;padding:40px 0}
+.bar{position:fixed;left:0;right:0;bottom:0;background:var(--card);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;gap:8px;align-items:flex-end}
+.bar textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:12px;padding:10px;font:inherit;background:var(--bg);color:var(--text);max-height:120px}
+.mic{width:48px;height:48px;border-radius:50%;background:var(--accent);color:#fff;font-size:22px;flex:none}
+.mic.rec{background:var(--danger);animation:p 1s infinite}
+@keyframes p{50%{opacity:.6}}
+.send{height:48px;padding:0 14px;background:var(--text);color:var(--bg);flex:none}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:10}
+.modal.on{display:flex}
+.sheet{background:var(--card);width:100%;max-width:560px;border-radius:18px 18px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));max-height:90vh;overflow:auto}
+.sheet h2{margin:0 0 12px;font-size:20px}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 4px}
+input,select{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;background:var(--bg);color:var(--text)}
+.row{display:flex;gap:8px}.row>*{flex:1}
+.primary{background:var(--accent);color:#fff;padding:12px;width:100%;margin-top:14px}
+.secondary{background:var(--bg);color:var(--text);padding:12px;width:100%;margin-top:8px}
+.hint{font-size:13px;color:var(--muted)}
+.toast{position:fixed;left:50%;top:20px;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;display:none;z-index:20;max-width:90%}
+.suggest{border-style:dashed}
+</style>
+</head>
+<body>
+<header>
+  <h1>Merker</h1>
+  <div>
+    <button class="icon-btn" id="btnSync" title="Gmail prüfen">✉️ Gmail</button>
+    <button class="icon-btn" id="btnSettings">⚙️</button>
+  </div>
+</header>
+<div class="tabs" id="tabs"></div>
+<div id="list"></div>
+
+<div class="bar">
+  <textarea id="input" rows="1" placeholder="Nachricht…"></textarea>
+  <button class="mic" id="mic" aria-label="Sprechen">🎤</button>
+  <button class="send" id="send">KI ➜</button>
+</div>
+
+<div class="modal" id="mSettings"><div class="sheet">
+  <h2>Einstellungen</h2>
+  <label>KI-Schlüssel – Groq (gsk_…) oder Gemini (bleibt nur auf diesem Gerät)</label>
+  <input id="sKey" type="password" autocomplete="off" placeholder="gsk_…">
+  <label>KI-Modell (leer lassen = automatisch)</label>
+  <input id="sModel" placeholder="automatisch">
+  <label>Über mich (hilft der KI beim Einordnen)</label>
+  <textarea id="sProfile" rows="6" style="width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;background:var(--bg);color:var(--text)"></textarea>
+  <label>Gmail-Skript-URL (aus Google Apps Script)</label>
+  <input id="sGmailUrl" placeholder="https://script.google.com/macros/s/…/exec">
+  <label>Gmail-Skript Geheimwort</label>
+  <input id="sGmailToken" type="password" autocomplete="off">
+  <button class="primary" id="sSave">Speichern</button>
+  <button class="secondary" id="sExport">Backup exportieren</button>
+  <button class="secondary" id="sClose">Schließen</button>
+</div></div>
+
+<div class="modal" id="mEdit"><div class="sheet">
+  <h2 id="eHead">Aufgabe</h2>
+  <label>Titel</label><input id="eTitle">
+  <div class="row">
+    <div><label>Kategorie</label><select id="eCat"></select></div>
+    <div><label>Priorität</label><select id="ePrio"><option value="normal">normal</option><option value="hoch">hoch</option><option value="niedrig">niedrig</option></select></div>
+  </div>
+  <div class="row">
+    <div><label>Datum / Deadline</label><input id="eDate" type="date"></div>
+    <div><label>Uhrzeit</label><input id="eTime" type="time"></div>
+  </div>
+  <label>Person / Name</label><input id="ePerson">
+  <label>Notiz</label><input id="eNotes">
+  <button class="primary" id="eSave">Speichern</button>
+  <button class="secondary" id="eDel" style="color:var(--danger)">Löschen</button>
+  <button class="secondary" id="eClose">Abbrechen</button>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const $=id=>document.getElementById(id);
+const store={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let CATS=store.get('cats',['Beruf','Privat']);
+const FIXED_COLOR={};
+const PALETTE=['#fbbf24','#a78bfa','#fb923c','#22d3ee','#a3e635','#f87171','#e879f9'];
+function catColor(c){if(FIXED_COLOR[c])return FIXED_COLOR[c];let h=0;for(const ch of c)h=(h*31+ch.charCodeAt(0))>>>0;return PALETTE[h%PALETTE.length]}
+const CAT_COLOR=new Proxy({},{get:(_,c)=>catColor(String(c))});
+function ensureCat(c){c=String(c||'').trim();if(!c)c='Persönlich';if(c==='Privat')c='Persönlich';c=c.charAt(0).toUpperCase()+c.slice(1,24);if(!CATS.includes(c)){CATS.push(c);store.set('cats',CATS);toast('Neue Kategorie: '+c)}return c}
+let tasks=store.get('tasks',[]);
+let cfg=store.get('cfg',{key:'',model:'gemini-2.5-flash',gmailUrl:'',gmailToken:''});
+let filter='Alle', editing=null;
+const save=()=>store.set('tasks',tasks);
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+function toast(m,ms=2500){const t=$('toast');t.textContent=m;t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',ms)}
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const todayISO=()=>{const d=new Date();d.setMinutes(d.getMinutes()-d.getTimezoneOffset());return d.toISOString().slice(0,10)};
+
+function fmtDate(t){
+  if(!t.due) return '';
+  const d=new Date(t.due+'T00:00'), today=new Date(todayISO()+'T00:00');
+  const diff=Math.round((d-today)/864e5);
+  let s=diff===0?'Heute':diff===1?'Morgen':diff===-1?'Gestern':d.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit'});
+  if(t.time) s+=' '+t.time;
+  return diff<0&&!t.done?`<span class="overdue">⚠ ${s}</span>`:'📅 '+s;
+}
+
+function render(){
+  $('tabs').innerHTML=['Alle',...CATS,'Erledigt'].map(c=>`<button class="tab ${c===filter?'on':''}" data-f="${c}">${c}</button>`).join('');
+  let list=tasks.filter(t=>filter==='Erledigt'?t.done:!t.done&&(filter==='Alle'||t.category===filter));
+  list.sort((a,b)=>(a.suggested?0:1)-(b.suggested?0:1)||(a.due||'9999').localeCompare(b.due||'9999')||(a.time||'').localeCompare(b.time||''));
+  if(!list.length){$('list').innerHTML='<div class="empty">Keine Aufgaben 🎉<br><span class="hint">Tippe auf 🎤 und sprich einfach drauflos.</span></div>';return}
+  const td=todayISO();
+  const when=t=>filter==='Erledigt'?'':!t.due?'Ohne Datum':t.due<td?'Überfällig':t.due===td?'Heute':'Demnächst';
+  const sugg=list.filter(t=>t.suggested), rest=list.filter(t=>!t.suggested);
+  const blocks=[];
+  if(sugg.length) blocks.push({head:'✉️ Vorschläge aus Gmail',color:'var(--accent)',items:sugg});
+  const cats=filter==='Alle'||filter==='Erledigt'?[...CATS,...new Set(rest.map(t=>t.category).filter(c=>!CATS.includes(c)))]:[filter];
+  for(const c of cats){const it=rest.filter(t=>t.category===c);if(it.length)blocks.push({head:c,color:catColor(c),items:it})}
+  $('list').innerHTML=blocks.map(b=>`<div class="cat-head"><span class="dot" style="background:${b.color}"></span>${esc(b.head)}<span class="cnt">${b.items.length}</span></div>`+b.items.map((t,i,a)=>{const w=when(t);const sub=w&&(i===0||when(a[i-1])!==w)?`<div class="section-title">${w}</div>`:'';return sub+`
+    <div class="task ${t.done?'done':''} ${t.suggested?'suggest':''}" data-id="${t.id}" style="--c:${catColor(t.category)}">
+      ${t.suggested?'':`<button class="check" data-act="toggle" aria-label="erledigt"></button>`}
+      <div class="t-body">
+        <div class="t-title">${t.priority==='hoch'?'❗ ':''}${esc(t.title)}</div>
+        <div class="t-meta">
+          <span class="badge" style="background:${CAT_COLOR[t.category]||CAT_COLOR.Sonstiges}">${esc(t.category)}</span>
+          ${fmtDate(t)}
+          ${t.person?`<span>👤 ${esc(t.person)}</span>`:''}
+          ${t.source?`<span>✉️ ${esc(t.source)}</span>`:''}
+        </div>
+        ${t.notes?`<div class="t-meta">${esc(t.notes)}</div>`:''}
+        <div class="t-actions">
+          ${t.suggested?`<button data-act="accept">✓ Übernehmen</button><button data-act="reject">✕ Verwerfen</button>`:''}
+          <button data-act="edit">Bearbeiten</button>
+          ${t.due?`<button data-act="ics">⏰ In Kalender</button>`:''}
+        </div>
+      </div>
+    </div>`}).join('')).join('');
+}
+
+$('tabs').onclick=e=>{const f=e.target.dataset.f;if(f){filter=f;render()}};
+$('list').onclick=e=>{
+  const act=e.target.dataset.act;if(!act)return;
+  const id=e.target.closest('.task').dataset.id;const t=tasks.find(x=>x.id===id);if(!t)return;
+  if(act==='toggle'){t.done=!t.done;t.doneAt=t.done?Date.now():null}
+  if(act==='accept'){t.suggested=false;toast('Übernommen')}
+  if(act==='reject'){tasks=tasks.filter(x=>x!==t)}
+  if(act==='edit'){openEdit(t);return}
+  if(act==='ics'){downloadICS(t);return}
+  save();render();
+};
+
+// ---------- KI ----------
+async function askAI(text, source){
+  if(!cfg.key){openSettings();toast('Bitte zuerst den KI-Schlüssel eintragen');throw new Error('kein Schlüssel')}
+  const now=new Date();
+  const open=tasks.filter(t=>!t.done&&!t.suggested).slice(-40).map(t=>({id:t.id,title:t.title,category:t.category,due:t.due,time:t.time,person:t.person,notes:t.notes,priority:t.priority}));
+  const prompt=`Du bist der Assistent einer Aufgaben-App und verwaltest die Aufgabenliste des Nutzers.
+Heute ist ${now.toLocaleDateString('de-DE',{weekday:'long',year:'numeric',month:'2-digit',day:'2-digit'})} (ISO ${todayISO()}), Uhrzeit ${now.toTimeString().slice(0,5)}, Zeitzone Europe/Berlin.
+
+ÜBER DEN NUTZER (sehr wichtig für Kategorie und Bedeutung):
+${cfg.profile||DEFAULT_PROFILE}
+
+Oberkategorien: ${CATS.join(', ')}. Nimm eine vorhandene. Nur wenn etwas klar ein eigener Lebensbereich ist (z. B. Gesundheit, Auto), erfinde eine neue kurze Oberkategorie (1 Wort).
+
+AKTUELLE OFFENE AUFGABEN (JSON):
+${JSON.stringify(open)}
+
+DER NUTZER SAGT JETZT (Spracheingabe, kann Erkennungsfehler enthalten):
+"""${text}"""
+
+ENTSCHEIDE:
+- Neue Sache -> op "add".
+- Korrigiert oder präzisiert der Nutzer etwas ("nein", "nicht X sondern Y", "ich meinte", "ändere", "eigentlich") oder geht es um dieselbe Sache wie eine bestehende Aufgabe -> op "update" mit der id der bestehenden Aufgabe und den korrigierten Feldern. Aufgaben, die nach der Korrektur falsch oder doppelt sind -> op "delete". Lege NIE ein Duplikat an.
+- "erledigt", "hab ich gemacht" -> op "done". "streich", "lösch", "fällt weg" -> op "delete".
+
+REGELN:
+- Namen richtig zuordnen: Wer ist Klient, wer Kollege, wer Familie? Title kurz, Deutsch, Imperativ. Beispiel: "Vertretung für Kollegin X: Termin mit Y übernehmen".
+- Zeitraum ("Montag bis Freitag nächste Woche"): due = erster Tag, notes = "bis TT.MM.".
+- Relative Angaben in konkrete Daten umrechnen. "Nächste Woche" ohne Tag = Montag nächster Woche. Kein Datum -> due leer.
+- priority "hoch", wenn andere Menschen auf den Nutzer angewiesen sind oder ein Versäumnis Folgen hat: andere informieren (z. B. Familie über abgesagten Termin), Absagen, Fristen, Zahlungen, Mahnungen, Termine mit Externen, "dringend"/"wichtig". Routine (Vertretung, Mitbringen, Einkauf) = "normal", außer es ist ausdrücklich dringend.
+- Keine Aufgabe enthalten -> leere Liste.
+
+Antworte NUR mit JSON: {"actions":[{"op":"add|update|delete|done","id":"nur bei update/delete/done","title":"","category":"","due":"YYYY-MM-DD oder leer","time":"HH:MM oder leer","person":"","notes":"","priority":"normal|hoch"}],"summary":"ein kurzer deutscher Satz, was du gemacht hast"}`;
+  let raw;
+  if(cfg.key.startsWith('gsk_')){ // Groq (kostenlos)
+    const H={'Content-Type':'application/json','Authorization':'Bearer '+cfg.key};
+    const pick=async()=>{const m=await (await fetch('https://api.groq.com/openai/v1/models',{headers:H})).json();
+      const ids=(m.data||[]).filter(x=>x.active!==false).map(x=>x.id).filter(id=>!/whisper|tts|guard|vision|embed|orpheus|compound/i.test(id));
+      const pref=[/gpt-oss-120b/,/llama-4-maverick/,/llama.*70b/,/qwen/,/gpt-oss/,/llama-4/,/llama/];
+      for(const p of pref){const f=ids.find(id=>p.test(id));if(f)return f}return ids[0]};
+    let model=(cfg.model||'').trim();if(!model||model.startsWith('gemini'))model=localStorage.getItem('groqModel')||await pick();
+    const call=md=>fetch('https://api.groq.com/openai/v1/chat/completions',{method:'POST',headers:H,
+      body:JSON.stringify({model:md,messages:[{role:'user',content:prompt}],response_format:{type:'json_object'},temperature:0.2})});
+    let r=await call(model),j=await r.json();
+    if(!r.ok&&/model/i.test(j.error?.message||'')){model=await pick();r=await call(model);j=await r.json()}
+    if(!r.ok) throw new Error(j.error?.message||('Fehler '+r.status));
+    try{localStorage.setItem('groqModel',model)}catch(e){}
+    raw=j.choices?.[0]?.message?.content||'{}';
+  }else{ // Google Gemini
+    const model=(cfg.model||'gemini-2.5-flash').trim();
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,{
+      method:'POST',headers:{'Content-Type':'application/json','x-goog-api-key':cfg.key},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{responseMimeType:'application/json',temperature:0.2}})
+    });
+    const j=await r.json();
+    if(!r.ok) throw new Error(j.error?.message||('Fehler '+r.status));
+    raw=j.candidates?.[0]?.content?.parts?.map(p=>p.text).join('')||'{}';
+  }
+  const out=JSON.parse(raw.replace(/^```json|```$/g,''));
+  return out;
+}
+function normalize(x,source){
+  return {id:uid(),title:String(x.title||'').trim()||'Aufgabe',category:ensureCat(x.category),
+    due:/^\d{4}-\d{2}-\d{2}$/.test(x.due||'')?x.due:'',time:/^\d{2}:\d{2}$/.test(x.time||'')?x.time:'',
+    person:x.person||'',notes:x.notes||'',priority:x.priority||'normal',done:false,created:Date.now(),source:source||''};
+}
+
+async function submit(){
+  const text=$('input').value.trim();if(!text)return;
+  $('send').disabled=true;$('send').textContent='…';
+  try{
+    const out=await askAI(text);
+    const acts=out.actions||(out.tasks||[]).map(t=>({op:'add',...t}));
+    const backup=JSON.stringify(tasks);const n={add:0,update:0,delete:0,done:0};
+    for(const a of acts){
+      const t=a.id&&tasks.find(x=>x.id===a.id);
+      if(a.op==='update'&&t){
+        const ch=Object.fromEntries(Object.entries(a).filter(([k,v])=>!['op','id'].includes(k)&&v!==''&&v!=null));
+        const nn=normalize({...t,...ch},t.source);
+        Object.assign(t,{title:nn.title,category:nn.category,due:nn.due,time:nn.time,person:nn.person,notes:nn.notes,priority:nn.priority});n.update++}
+      else if(a.op==='delete'&&t){tasks=tasks.filter(x=>x!==t);n.delete++}
+      else if(a.op==='done'&&t){t.done=true;t.doneAt=Date.now();n.done++}
+      else if(a.op==='add'||!a.op){tasks.push(normalize(a,''));n.add++}
+    }
+    if(!acts.length) toast('Keine Aufgabe erkannt');
+    else{lastBackup=backup;showUndo(out.summary||[n.add&&n.add+' neu',n.update&&n.update+' geändert',n.delete&&n.delete+' gelöscht',n.done&&n.done+' erledigt'].filter(Boolean).join(', '))}
+    $('input').value='';autoGrow();save();render();
+  }catch(e){toast('KI-Fehler: '+e.message,5000)}
+  finally{$('send').disabled=false;$('send').textContent='KI ➜'}
+}
+let lastBackup=null;
+function showUndo(msg){const t=$('toast');t.innerHTML=esc(msg)+' <button id="undoBtn" style="margin-left:8px;background:var(--accent);color:#fff;padding:4px 10px;border-radius:8px">Rückgängig</button>';t.style.display='block';clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',9000);$('undoBtn').onclick=()=>{if(lastBackup){tasks=JSON.parse(lastBackup);lastBackup=null;save();render();toast('Rückgängig gemacht')}}}
+const DEFAULT_PROFILE=`(Noch kein Profil hinterlegt. Ordne nach gesundem Menschenverstand zu und frage bei Unklarheit nach.)`;
+$('send').onclick=submit;
+function autoGrow(){const i=$('input');i.style.height='auto';i.style.height=Math.min(i.scrollHeight,120)+'px'}
+$('input').addEventListener('input',autoGrow);
+
+// ---------- Sprache ----------
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;let rec=null,recOn=false;
+$('mic').onclick=()=>{
+  if(!SR){$('input').focus();toast('Tipp: Nutze das 🎤 auf der iPhone-Tastatur zum Diktieren',4000);return}
+  if(recOn){rec.stop();return}
+  rec=new SR();rec.lang='de-DE';rec.continuous=true;rec.interimResults=true;
+  const base=$('input').value?$('input').value+' ':'';
+  rec.onresult=e=>{let s='';for(const r of e.results)s+=r[0].transcript;$('input').value=base+s;autoGrow()};
+  rec.onerror=e=>{toast('Mikrofon: '+e.error)};
+  rec.onend=()=>{recOn=false;$('mic').classList.remove('rec');$('mic').textContent='🎤'};
+  rec.start();recOn=true;$('mic').classList.add('rec');$('mic').textContent='■';
+};
+
+// ---------- Bearbeiten ----------
+$('eCat').onchange=()=>{if($('eCat').value==='__new'){const n=prompt('Name der neuen Kategorie:');const c=n?ensureCat(n):editing.category;fillCats();$('eCat').value=c}};
+function fillCats(){$('eCat').innerHTML=CATS.map(c=>`<option>${esc(c)}</option>`).join('')+'<option value="__new">+ Neue Kategorie…</option>'}
+function openEdit(t){editing=t;fillCats();$('eTitle').value=t.title;$('eCat').value=t.category;$('ePrio').value=t.priority||'normal';$('eDate').value=t.due||'';$('eTime').value=t.time||'';$('ePerson').value=t.person||'';$('eNotes').value=t.notes||'';$('mEdit').classList.add('on')}
+$('eSave').onclick=()=>{Object.assign(editing,{title:$('eTitle').value.trim()||editing.title,category:$('eCat').value,priority:$('ePrio').value,due:$('eDate').value,time:$('eTime').value,person:$('ePerson').value,notes:$('eNotes').value});save();render();$('mEdit').classList.remove('on')};
+$('eDel').onclick=()=>{if(confirm('Aufgabe löschen?')){tasks=tasks.filter(x=>x!==editing);save();render();$('mEdit').classList.remove('on')}};
+$('eClose').onclick=()=>$('mEdit').classList.remove('on');
+
+// ---------- Kalender-Erinnerung (.ics) ----------
+function downloadICS(t){
+  const d=t.due.replace(/-/g,'');const tm=(t.time||'09:00').replace(':','')+'00';
+  const end=t.time?d+'T'+String((+t.time.slice(0,2)+1)%24).padStart(2,'0')+t.time.slice(3)+'00':d+'T093000';
+  const ics=['BEGIN:VCALENDAR','VERSION:2.0','PRODID:-//Merker//DE','BEGIN:VEVENT','UID:'+t.id+'@merker',
+    'DTSTAMP:'+new Date().toISOString().replace(/[-:]/g,'').slice(0,15)+'Z',
+    'DTSTART;TZID=Europe/Berlin:'+d+'T'+tm,'DTEND;TZID=Europe/Berlin:'+end,
+    'SUMMARY:'+t.title.replace(/[,;]/g,' '),'DESCRIPTION:'+[t.category,t.person,t.notes].filter(Boolean).join(' - ').replace(/[,;\n]/g,' '),
+    'BEGIN:VALARM','TRIGGER:-PT30M','ACTION:DISPLAY','DESCRIPTION:Erinnerung','END:VALARM',
+    'BEGIN:VALARM','TRIGGER:-P1D','ACTION:DISPLAY','DESCRIPTION:Erinnerung','END:VALARM',
+    'END:VEVENT','END:VCALENDAR'].join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([ics],{type:'text/calendar'}));a.download='erinnerung.ics';a.click();
+}
+
+// ---------- Gmail ----------
+async function syncGmail(silent){
+  if(!cfg.gmailUrl){if(!silent){openSettings();toast('Gmail-Skript-URL fehlt')}return}
+  try{
+    const r=await fetch(cfg.gmailUrl+'?token='+encodeURIComponent(cfg.gmailToken)+'&action=list');
+    const j=await r.json();if(j.error)throw new Error(j.error);
+    const known=new Set(tasks.map(t=>t.gid).filter(Boolean));let n=0;const ids=[];
+    for(const g of j.tasks||[]){ids.push(g.gid);if(known.has(g.gid))continue;const t=normalize(g,g.source);t.gid=g.gid;t.suggested=true;tasks.push(t);n++}
+    if(ids.length) await fetch(cfg.gmailUrl+'?token='+encodeURIComponent(cfg.gmailToken)+'&action=ack&ids='+encodeURIComponent(ids.join(',')));
+    save();render();if(!silent||n)toast(n?`${n} neue Vorschläge aus Gmail`:'Keine neuen Aufgaben in Gmail');
+  }catch(e){if(!silent)toast('Gmail-Fehler: '+e.message,5000)}
+}
+$('btnSync').onclick=()=>syncGmail(false);
+
+// ---------- Einstellungen ----------
+function openSettings(){$('sKey').value=cfg.key;$('sModel').value=cfg.model;$('sGmailUrl').value=cfg.gmailUrl;$('sGmailToken').value=cfg.gmailToken;$('sProfile').value=cfg.profile||DEFAULT_PROFILE;$('mSettings').classList.add('on')}
+$('btnSettings').onclick=openSettings;
+$('sClose').onclick=()=>$('mSettings').classList.remove('on');
+$('sSave').onclick=()=>{cfg={key:$('sKey').value.trim(),model:$('sModel').value.trim(),gmailUrl:$('sGmailUrl').value.trim(),gmailToken:$('sGmailToken').value.trim(),profile:$('sProfile').value.trim()};store.set('cfg',cfg);$('mSettings').classList.remove('on');toast('Gespeichert ✓')};
+$('sExport').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(tasks,null,2)],{type:'application/json'}));a.download='merker-backup.json';a.click()};
+
+// ---------- Start ----------
+render();
+if(!cfg.key) setTimeout(openSettings,400);
+syncGmail(true);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)syncGmail(true)});
+if('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script>
+<script src="chat.js"></script>
+<script src="me.js"></script>
+</body>
+</html>
