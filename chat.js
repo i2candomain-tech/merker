@@ -159,8 +159,11 @@ const SRx=window.SpeechRecognition||window.webkitSpeechRecognition;let mrec=null
 const micBtn=$('mic');
 function micUI(on){mOn=on;micBtn.classList.toggle('rec',on);micBtn.textContent=on?'■':'🎤'}
 function stopRec(){if(mrec){const r=mrec;mrec=null;r.onresult=null;r.onerror=null;r.onend=null;try{r.abort()}catch(e){}}micUI(false)}
+// iPhone: eingebaute Web-Spracherkennung ist dort unzuverlässig -> Tastatur-Diktat nutzen
+const isIOS=/iPhone|iPad|iPod/.test(navigator.userAgent)||(navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
 micBtn.onclick=()=>{
-  if(!SRx){$('input').focus();toast('Tipp: Nutze das 🎤 auf der iPhone-Tastatur zum Diktieren',4000);return}
+  if(!SRx||isIOS){$('input').focus();toast('Tippe unten rechts auf der Tastatur auf 🎤 und sprich – das ist am zuverlässigsten.',4500);return}
+  if(false){$('input').focus();toast('Tipp: Nutze das 🎤 auf der iPhone-Tastatur zum Diktieren',4000);return}
   if(mOn){const r=mrec;if(r){try{r.stop()}catch(e){}}return}   // stop() liefert das letzte Ergebnis noch
   const r=new SRx();mrec=r;r.lang='de-DE';r.continuous=false;r.interimResults=true;
   const base=$('input').value?$('input').value.replace(/\s*$/,' '):'';
@@ -207,6 +210,7 @@ SO ARBEITEST DU:
 - Lies die letzte Nachricht im Zusammenhang mit dem Chat und dem Profil. Ordne selbst zu, ohne dass der Nutzer Kategorien nennen muss.
 - Frage nur nach, wenn eine wichtige Info wirklich fehlt: Datum/Uhrzeit bei Terminen, mehrdeutige Person (prüfe die Personen im Profil – rate nicht, welcher "Alex" gemeint ist), Bereich wirklich unklar. EINE kurze Frage; diesen Eintrag dann noch NICHT anlegen. Klare Teile sofort anlegen.
 - Sagt der Nutzer "egal", "kein Datum", "weiß nicht" -> ohne diese Angabe anlegen.
+- Beschwert sich der Nutzer, dass etwas falsch ist ("du hast X falsch gemacht", "bei Y stimmt das nicht"), finde den gemeinten Eintrag in OFFENE EINTRÄGE (über Titel/Person) und liefere ZWINGEND eine "update"-Aktion mit dessen id. Nur antworten ohne Aktion ist dann verboten. Verwechsle nicht die Einträge verschiedener Personen.
 - Korrekturen ("nein", "nicht X sondern Y", "ich meinte") -> bestehenden Eintrag per "update" (mit id) ändern, falsche per "delete". NIE Duplikate.
 - "erledigt" -> "done"; "streich/lösch" -> "delete". Fragen zur Liste ("was steht morgen an?") aus den Einträgen beantworten, ohne Aktionen.
 - ZEITRÄUME ("ganze nächste Woche", "Montag bis Freitag", "vom 3. bis 7.") sind IMMER GENAU EIN Eintrag: due = erster Tag, until = letzter Tag (YYYY-MM-DD). NIEMALS pro Tag einen eigenen Eintrag anlegen. "Ganze Woche" bei Arbeit = Montag bis Freitag.
@@ -214,7 +218,7 @@ SO ARBEITEST DU:
 - Einsatzorte mit "nächstem Einsatz" im Profil: Aufgaben für diesen Ort sind erst dann fällig (due = dieser Tag), Priorität normal.
 - priority "hoch", wenn andere auf den Nutzer angewiesen sind oder ein Versäumnis Folgen hat (Fristen, Zahlungen, Absagen, andere informieren, Vorträge/Leitungsaufgaben vorbereiten, Externe, "dringend/wichtig"). Routine = "normal".
 - Plane mit Rücksicht auf feste Termine und Verpflichtungen aus dem Profil. Weise kurz auf Überschneidungen hin.
-- Neue langfristige Infos über den Nutzer (nicht einmalige Aufgaben!), z. B. neue Rolle oder geänderte Gewohnheit -> in "profile_updates" eintragen. PERSONEN kommen NIE in profile_updates, sondern einzeln in "people": für JEDE genannte Person ein eigener Eintrag mit name (nur der Name), role (kurz, z. B. "Teamleitung", "Kollegin", "Klient") und area; Zusatzinfos kurz in note. Bei 5 Personen also 5 Einträge. Widerspricht etwas dem Profil, frage nach statt zu überschreiben.
+- Neue langfristige Infos über den Nutzer (nicht einmalige Aufgaben!), z. B. neue Rolle oder geänderte Gewohnheit -> in "profile_updates" eintragen. PERSONEN kommen NIE in profile_updates, sondern einzeln in "people": für JEDE genannte Person ein eigener Eintrag mit name (nur der Name), role (kurz, z. B. "Teamleitung", "Kollegin", "Klient") und area; Zusatzinfos kurz in note. Bei 5 Personen also 5 Einträge. note höchstens ein kurzer Halbsatz (max. 80 Zeichen), NIE den ganzen Text hineinkopieren. Beispiel: "Lena ist meine Teamleitung, Tom und Mia sind Klienten" -> "people":[{"name":"Lena","role":"Teamleitung"},{"name":"Tom","role":"Klient"},{"name":"Mia","role":"Klientin"}]. Widerspricht etwas dem Profil, frage nach statt zu überschreiben.
 - Klientendaten sparsam: nur Vorname/Kürzel in Titeln, keine Diagnosen oder Fallinfos.
 - Ton: so wie im Profil gewünscht (du, direkt, präzise, ohne Floskeln). Antworte in 1–3 Sätzen. KEINE Begrüßung, keine Anrede mit Namen am Anfang – komm direkt zur Sache.
 
