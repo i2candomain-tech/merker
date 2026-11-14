@@ -154,9 +154,23 @@ function applyActions(acts){
 }
 
 // Spracherkennung stoppen, sobald getippt/korrigiert oder gesendet wird – sonst überschreibt sie die Korrektur
-const stopRec=()=>{try{if(recOn&&rec){rec.onresult=null;rec.abort()}}catch(e){}};
-$('input').addEventListener('input',e=>{if(e.isTrusted)stopRec()});
-$('input').addEventListener('focus',stopRec);
+// Eigenes, iPhone-taugliches Mikrofon: pro Druck eine neue, kurze Aufnahme (kein Dauermodus)
+const SRx=window.SpeechRecognition||window.webkitSpeechRecognition;let mrec=null,mOn=false;
+const micBtn=$('mic');
+function micUI(on){mOn=on;micBtn.classList.toggle('rec',on);micBtn.textContent=on?'■':'🎤'}
+function stopRec(){if(mrec){const r=mrec;mrec=null;r.onresult=null;r.onerror=null;r.onend=null;try{r.abort()}catch(e){}}micUI(false)}
+micBtn.onclick=()=>{
+  if(!SRx){$('input').focus();toast('Tipp: Nutze das 🎤 auf der iPhone-Tastatur zum Diktieren',4000);return}
+  if(mOn){const r=mrec;if(r){try{r.stop()}catch(e){}}return}   // stop() liefert das letzte Ergebnis noch
+  const r=new SRx();mrec=r;r.lang='de-DE';r.continuous=false;r.interimResults=true;
+  const base=$('input').value?$('input').value.replace(/\s*$/,' '):'';
+  r.onresult=e=>{let s='';for(const x of e.results)s+=x[0].transcript;$('input').value=base+s;autoGrow()};
+  r.onerror=e=>{if(e.error!=='aborted'&&e.error!=='no-speech')toast('Mikrofon: '+e.error)};
+  r.onend=()=>{if(mrec===r)mrec=null;micUI(false)};
+  try{r.start();micUI(true)}catch(err){micUI(false);toast('Mikrofon konnte nicht starten – bitte nochmal tippen')}
+};
+// Tippt man selbst ins Feld (Korrektur), Aufnahme beenden, damit sie nichts überschreibt
+$('input').addEventListener('input',e=>{if(e.isTrusted&&mOn)stopRec()});
 async function chatSend(){
   stopRec();
   const text=$('input').value.trim();if(!text)return;
