@@ -270,4 +270,6 @@ Antworte NUR mit JSON:
 $('send').onclick=chatSend;
 $('send').textContent='➤';
 setMode(mode);
+// Geräte-Abgleich nachladen
+{const s=document.createElement('script');s.src='sync.js?v=1';document.body.appendChild(s)}
 })();
